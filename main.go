@@ -32,7 +32,48 @@ func (node BNode) nkeys() uint16 {
 func (node BNode) setHeader(btype uint16, nkeys uint16) {
 	binary.LittleEndian.PutUint16(node[0:2], btype)
 	binary.LittleEndian.PutUint16(node[2:4], nkeys)
+}
 
+// read and write the child pointer array
+func (node BNode) getPtr(idx uint16) uint64 {
+	if idx >= node.nkeys() {
+		panic("index out of range")
+	}
+	pos := 4 + idx*8
+	return binary.LittleEndian.Uint64(node[pos:])
+}
+
+func (node BNode) setPtr(idx uint16, val uint64) {
+	if idx >= node.nkeys() {
+		panic("index out of range")
+	}
+	pos := 4 + idx*8
+	binary.LittleEndian.PutUint64(node[pos:], val)
+}
+
+// read the 'offset' of array
+func (node BNode) getOffset(idx uint16) uint16 {
+	if idx == 0 {
+		return 0
+	}
+	pos := 4 + 8*node.nkeys() + 2*(idx-1)
+	return binary.LittleEndian.Uint16(node[pos:])
+}
+
+// get the position of the key and value in the node
+func (node BNode) KvPos(idx uint16) uint16 {
+	if idx >= node.nkeys() {
+		panic("index out of range")
+	}
+	return 4 + 8*node.nkeys() + 2*node.nkeys() + node.getOffset(idx)
+}
+
+func (node BNode) getkey(idx uint16) []byte {
+	if idx >= node.nkeys() {
+		panic("index out of range")
+	}
+	pos := node.KvPos(idx)
+	klen := binary.LittleEndian.Uint16(node[pos:])
 }
 
 // Encode the node into a byte array
