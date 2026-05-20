@@ -208,3 +208,17 @@ func nodeInsertOrUpdate(new BNode, old BNode, key []byte, val []byte) {
 		leafInsert(new, old, idx+1, key, val) //insert after the position of the node
 	}
 }
+
+// I dont sure this part is right for bnode.go,it is about the split of the node
+// this is original content about it
+// For an in-memory B+tree, an oversized node can be split into 2 nodes
+// each with half of the keys. For a disk-based B+tree
+// half of the keys may not fit into a page due to uneven key sizes.
+// However, we can use the half position as an initial guess
+// then move it left or right if the half is too large.
+// 对于内存中的 B+树，过大的节点可以拆分为两个节点，每个节点包含一半的键。
+// 而对于基于磁盘的 B+树，由于键大小不均，一半的键可能无法放入一个页面。
+// 不过，我们可以将中间位置作为初始猜测，如果该位置过大，则向左或向右移动。
+func nodeSplit2(left BNode, right BNode, old BNode) {
+
+}
