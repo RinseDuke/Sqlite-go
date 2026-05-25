@@ -37,6 +37,36 @@ type Node struct {
 // BNODE(a decode bnode tree)
 type BNode []byte //can be drupmed to the disk
 
+/*
+BNode page layout / 节点页布局
+
++----------------+----------------+----------------+----------------+
+| header         | ptr area       | offset area    | key-value area |
++----------------+----------------+----------------+----------------+
+| 4 bytes        | 8 * nkeys      | 2 * nkeys      | variable size  |
++----------------+----------------+----------------+----------------+
+
+header:
+	[0:2] btype  -> BNODE_NODE or BNODE_LEAF
+	[2:4] nkeys  -> number of key/value slots
+
+ptr area:
+	ptr[i] is a uint64 stored at 4 + i*8.
+	In leaf nodes it is unused and usually set to 0.
+	In internal nodes it stores the child page id; after nodeLookupLE finds idx,
+	BTree uses getPtr(idx) and tree.get(ptr) to load the child node.
+
+offset area:
+	offset[0] is implicit 0; offset[i] records cumulative KV bytes.
+	KvPos(idx) = header + ptr area + offset area + offset[idx].
+
+key-value area:
+	each item is encoded as: klen(2B) + vlen(2B) + key + val.
+	Internal nodes usually keep val empty; leaf nodes store real key/value pairs.
+
+Current implementation uses nkeys ptrs, one ptr per key slot.
+*/
+
 func init() {
 	node1max := 4 + 1*8 + 1*2 + 4 + BTREE_MAX_KEY_SIZE + BTREE_MAX_VAL_SIZE
 	assert(node1max < BTREE_PAGE_SIZE, "node size exceeds page size")
@@ -252,29 +282,27 @@ func nodeSplit2(left BNode, right BNode, old BNode) {
 	assert(right.nbytes() <= BTREE_PAGE_SIZE, "right node is too big to split")
 }
 
-//mulitple node split
-//Our size limits allow a single KV to take up almost the entire page
-//which allows for the big-key-in-the-middle case.
-//So the result of a split is either 2 or 3 nodes:
-func nodeSplit3(old BNode) (uint16,[3]BNode){
+// mulitple node split
+// Our size limits allow a single KV to take up almost the entire page
+// which allows for the big-key-in-the-middle case.
+// So the result of a split is either 2 or 3 nodes:
+func nodeSplit3(old BNode) (uint16, [3]BNode) {
 	//that mean old node is smaller than the page size
 	//no split
-	if old.nbytes()<=BTREE_PAGE_SIZE{
-		old=old[:BTREE_PAGE_SIZE]//just return the old node if it is small enough
-		return 1,[3]BNode{old,nil,nil}
+	if old.nbytes() <= BTREE_PAGE_SIZE {
+		old = old[:BTREE_PAGE_SIZE] //just return the old node if it is small enough
+		return 1, [3]BNode{old, nil, nil}
 	}
 	left := BNode(make([]byte, BTREE_PAGE_SIZE*2)) //might be split later
 	right := BNode(make([]byte, BTREE_PAGE_SIZE))
 	nodeSplit2(left, right, old)
-	if left.nbytes()<=BTREE_PAGE_SIZE{
-		left =left[:BTREE_PAGE_SIZE]//just return the left node if it is small enough
-		return 2,[3]BNode{left,right,nil} //2nodes
+	if left.nbytes() <= BTREE_PAGE_SIZE {
+		left = left[:BTREE_PAGE_SIZE]        //just return the left node if it is small enough
+		return 2, [3]BNode{left, right, nil} //2nodes
 	}
 	//left node is still too big, split it again
 	mid := BNode(make([]byte, BTREE_PAGE_SIZE))
 	nodeSplit2(left, mid, left)
-	assert(mid.nbytes()<=BTREE_PAGE_SIZE,"mid node is too big to split")
-	return 3,[3]BNode{left,mid,right} //3nodes
-}	//tips:The 3-node case can be eliminated by lowering the KV size limit.
-
-
+	assert(mid.nbytes() <= BTREE_PAGE_SIZE, "mid node is too big to split")
+	return 3, [3]BNode{left, mid, right} //3nodes
+} //tips:The 3-node case can be eliminated by lowering the KV size limit.
