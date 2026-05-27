@@ -1,8 +1,11 @@
 package main
 
-import "bytes"
+import (
+	"bytes"
+	"fmt"
+)
 
-//Btree struct
+// Btree struct
 type BTree struct {
 	//root pointer
 	root uint64
@@ -12,7 +15,7 @@ type BTree struct {
 	del func(uint64)        //deallocate a page number
 }
 
-//Btree node insert
+// Btree node insert
 func treeInsert(tree *BTree, node BNode, key []byte, val []byte) BNode {
 	//init the BNode
 	new := BNode(make([]byte, BTREE_PAGE_SIZE*2))
@@ -44,7 +47,7 @@ func treeInsert(tree *BTree, node BNode, key []byte, val []byte) BNode {
 	return new
 }
 
-//a function to replace the kid nodes of a node with new kid nodes
+// a function to replace the kid nodes of a node with new kid nodes
 func nodeReplaceKidN(tree *BTree, new BNode, old BNode, idx uint16, kid ...BNode) {
 	inc := uint16(len(kid))
 	new.setHeader(BNODE_NODE, old.nkeys()+inc-1)
@@ -57,8 +60,17 @@ func nodeReplaceKidN(tree *BTree, new BNode, old BNode, idx uint16, kid ...BNode
 	nodeAppendRange(new, old, idx+inc, idx+1, old.nkeys()-(idx+1))
 }
 
-//High level API for BTree
-//Btree insert
+func checkLimit(key []byte, val []byte) error {
+	if len(key) > BTREE_MAX_KEY_SIZE {
+		return fmt.Errorf("key size exceds limits")
+	}
+	if len(val) > BTREE_MAX_VAL_SIZE {
+		return fmt.Errorf("value size exceds limits")
+	}
+}
+
+// High level API for BTree
+// Btree insert
 func (tree *BTree) Insert(key []byte, val []byte) error {
 	//check the length limit imposed by the node format
 	if err := checkLimit(key, val); err != nil {
@@ -69,7 +81,9 @@ func (tree *BTree) Insert(key []byte, val []byte) error {
 	if tree.root == 0 {
 		//create a new leaf node
 		root := BNode(make([]byte, BTREE_PAGE_SIZE))
-		//set the
+		//directly insert the key and value into the node
+		root.setHeader(BNODE_LEAF, 0)
+		nodeAppendKV(root, 0, 0, key, val)
 		tree.root = tree.new(root) //allocate a new page number with data
 		return nil
 	}
@@ -84,7 +98,9 @@ func (tree *BTree) Insert(key []byte, val []byte) error {
 	if nsplit > 1 {
 		//create a new root node
 		root := BNode(make([]byte, BTREE_PAGE_SIZE*2))
-
+		for i := uint16(0); i < nsplit; i++ {
+			nodeAppendKV(root, i, tree.new(split[i]), split[i].getkey(0), nil)
+		}
 		//set the new root node
 		tree.root = tree.new(root)
 	} else {
